@@ -1,6 +1,16 @@
+# Ansible artifacts
 *.retry
 *.log
+
+# Secrets — never commit
 .env
 vault_pass
 *.vault
 group_vars/*/vault.yml
+
+# Ansible Vault decrypted files
+*.decrypted
+
+# Editor / OS noise
+*.swp
+.DS_Store
