@@ -1,0 +1,96 @@
+---
+- name: Baseline VM configuration
+  hosts: all
+  become: true
+
+  vars:
+    locale_lang: en_US.UTF-8
+    locale_regional: nl_BE.UTF-8
+    timezone: Europe/Brussels
+
+  tasks:
+    # --- Packages ---
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Install baseline packages
+      ansible.builtin.apt:
+        name:
+          - curl
+          - vim
+          - htop
+          - ufw
+          - fail2ban
+          - unattended-upgrades
+        state: present
+
+    # --- Locale ---
+    - name: Ensure locales are generated
+      community.general.locale_gen:
+        name: "{{ item }}"
+        state: present
+      loop:
+        - "{{ locale_lang }}"
+        - "{{ locale_regional }}"
+
+    - name: Set system locale
+      ansible.builtin.copy:
+        dest: /etc/default/locale
+        mode: "0644"
+        content: |
+          LANG={{ locale_lang }}
+          LANGUAGE=en_US
+          LC_NUMERIC={{ locale_regional }}
+          LC_TIME={{ locale_regional }}
+          LC_MONETARY={{ locale_regional }}
+          LC_PAPER={{ locale_regional }}
+          LC_NAME={{ locale_regional }}
+          LC_ADDRESS={{ locale_regional }}
+          LC_TELEPHONE={{ locale_regional }}
+          LC_MEASUREMENT={{ locale_regional }}
+          LC_IDENTIFICATION={{ locale_regional }}
+
+    # --- Timezone ---
+    - name: Set system timezone
+      community.general.timezone:
+        name: "{{ timezone }}"
+
+    # --- SSH hardening ---
+    - name: Disable SSH password authentication
+      ansible.builtin.lineinfile:
+        path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+        regexp: "^#?PasswordAuthentication"
+        line: "PasswordAuthentication no"
+        create: true
+        mode: "0644"
+      notify: Restart ssh
+
+    # --- Firewall ---
+    - name: Allow SSH through UFW from LAN
+      community.general.ufw:
+        rule: allow
+        port: "22"
+        proto: tcp
+        src: 192.168.0.0/24
+
+    - name: Set UFW default deny incoming
+      community.general.ufw:
+        default: deny
+        direction: incoming
+
+    - name: Set UFW default allow outgoing
+      community.general.ufw:
+        default: allow
+        direction: outgoing
+
+    - name: Enable UFW
+      community.general.ufw:
+        state: enabled
+
+  handlers:
+    - name: Restart ssh
+      ansible.builtin.service:
+        name: ssh
+        state: restarted
